@@ -1,17 +1,13 @@
-DELETE_ALL = """
-MATCH (n)
-DETACH DELETE n
-"""
-
 LOAD_UPDATES = """
 LOAD CSV WITH HEADERS FROM "file:///COVID-19Cases.csv" AS line
 
-MERGE (update:Update {Country_Region: line.Country_Region, Case_Type: line.Case_Type, Date: line.Date})
+WITH line, SPLIT(line.Date, "/") AS split_date
+WITH apoc.map.removeKey(line, 'Date') AS line, DATE({month: toInteger(split_date[0]),
+                                                     day: toInteger(split_date[1]),
+                                                     year: toInteger(split_date[2])}) AS date
+
+MERGE (update:Update {Country_Region: line.Country_Region, Case_Type: line.Case_Type, Date: date})
 SET update += line
-WITH line, update, SPLIT(update.Date, "/") AS datetime
-SET update.Date = DATE({month: toInteger(datetime[0]),
-                        day: toInteger(datetime[1]),
-                        year: toInteger(datetime[2])})
 
 WITH line, update
 CALL apoc.create.addLabels([update], [line.Case_Type])

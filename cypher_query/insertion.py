@@ -6,7 +6,8 @@ WITH apoc.map.removeKey(line, 'Date') AS line, DATE({month: toInteger(split_date
                                                      day: toInteger(split_date[1]),
                                                      year: toInteger(split_date[2])}) AS date
 
-MERGE (update:Update {Country_Region: line.Country_Region, Case_Type: line.Case_Type, Date: date})
+MERGE (update:Update {Country_Region: line.Country_Region, Case_Type: line.Case_Type, Date: date,
+                      Province_State: line.Province_State})
 SET update += line
 
 WITH line, update
@@ -19,8 +20,10 @@ LOAD_COUNTRIES = """
 MATCH (update:Update)
 WHERE NOT (update)-[:IN_COUNTRY_CASE]->(:CaseType)
 
-MERGE (country:Country {Country_Region: update.Country_Region})
-MERGE (case_type: CaseType {Case_Type: update.Case_Type, Country_Region: country.Country_Region})
+MERGE (country:Country {Country_Region: update.Country_Region, Province_State: update.Province_State})
+ON CREATE SET country.Lat = update.Lat, country.Long = update.Long
+MERGE (case_type: CaseType {Case_Type: update.Case_Type, Country_Region: country.Country_Region,
+       Province_State: country.Province_State})
 MERGE (case_type)-[case_rel:IN_COUNTRY]->(country)
 MERGE (update)-[:IN_COUNTRY_CASE {Date: update.Date, Cases: update.Cases}]->(case_type)
 
@@ -172,4 +175,49 @@ SET next_global_update.Difference = difference
 MERGE (global_update)-[:NEXT_UPDATE {Cases_Difference: next_global_update.Difference,
                                      Days_Difference: duration.inDays(global_update.Date, next_global_update.Date).Days}]
                      ->(next_global_update)
+"""
+
+LOAD_MOST_CASES_FOR_DATE = """
+OPTIONAL MATCH (update:Update)
+WHERE update:MostDeathsForDate OR update:MostConfirmedForDate
+REMOVE update:MostDeathsForDate, update:MostConfirmedForDate
+WITH COLLECT(update) AS updates
+
+MATCH (date:Date)
+
+MATCH (date)<-[:IN_DATE]-(update:Update:Deaths)
+
+WITH date, update
+ORDER BY update.Cases DESC
+WITH date, COLLECT(update) AS updates
+WITh date, updates[0] AS most_deaths_update
+
+SET most_deaths_update:MostDeathsForDate
+
+WITH date
+MATCH (date)<-[:IN_DATE]-(update:Update:Confirmed)
+
+WITH date, update
+ORDER BY update.Cases DESC
+WITH date, COLLECT(update) AS updates
+WITh date, updates[0] AS most_confirmed_update
+
+SET most_confirmed_update:MostConfirmedForDate
+"""
+
+LOAD_PEOPLE = """
+MATCH (update:Update)
+
+MERGE (people:People)-[:FROM_UPDATE]->(update)
+ON CREATE SET people.Cases = 0
+
+WITH update, people
+WHERE toInteger(people.Cases) < toInteger(update.Difference)
+
+UNWIND RANGE(toInteger(people.Cases), toInteger(update.Difference) - 1) AS case_number
+CREATE (person:Person {Lat: update.Lat, Long: update.Long})
+CREATE (person)-[:GROUP_BY]->(people)
+
+WITH update, people, COLLECT(person) AS persons
+SET people.Cases = update.Difference
 """

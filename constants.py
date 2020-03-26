@@ -4,7 +4,7 @@ USERNAME = "neo4j"
 PASSWORD = "tur103103"
 
 # Chart Visualization
-TITLE = "Progression of CoronaVirus {case_type} in: {country_region}"
+TITLE = "Progression of CoronaVirus {case_type} in: {country_region} {province_state}"
 NEGATIVE_NUMBER_OF_RECORDS_TO_SHOW = -20
 FIRST_SUB_PLOT_LOCATION = (2, 1, 1)
 SECOND_SUB_PLOT_LOCATION = (2, 1, 2)

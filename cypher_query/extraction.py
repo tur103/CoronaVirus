@@ -1,5 +1,5 @@
 FIND_PROGRESSION = """
-MATCH (country:Country {{Country_Region: '{country_region}'}})
+MATCH (country:Country {{Country_Region: '{country_region}', Province_State: '{province_state}'}})
 MATCH (case_type:CaseType)-[:IN_COUNTRY]->(country)
 MATCH (update:Update)-[:IN_COUNTRY_CASE]->(case_type)
 WITH country, case_type, update

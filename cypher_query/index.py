@@ -13,3 +13,7 @@ CREATE INDEX FOR (case_type:CaseType) ON (case_type.Case_Type, case_type.Country
 LOAD_DATE_INDEX = """
 CREATE INDEX FOR (date:Date) ON (date.Date)
 """
+
+LOAD_GLOBAL_UPDATE_INDEX = """
+CREATE INDEX FOR (global_update:GlobalUpdate) ON (global_update.Date, global_update.Case_Type)
+"""

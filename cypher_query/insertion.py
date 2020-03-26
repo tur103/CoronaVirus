@@ -27,7 +27,7 @@ MERGE (case_type: CaseType {Case_Type: update.Case_Type, Country_Region: country
 MERGE (case_type)-[case_rel:IN_COUNTRY]->(country)
 MERGE (update)-[:IN_COUNTRY_CASE {Date: update.Date, Cases: update.Cases}]->(case_type)
 
-WITH COLLECT(case_type) as case_types
+WITH COLLECT(case_type) AS case_types
 UNWIND case_types AS case_type
 CALL apoc.create.addLabels([case_type], [case_type.Case_Type])
 YIELD node 
@@ -217,6 +217,8 @@ WHERE toInteger(people.Cases) < toInteger(update.Difference)
 UNWIND RANGE(toInteger(people.Cases), toInteger(update.Difference) - 1) AS case_number
 CREATE (person:Person {Lat: update.Lat, Long: update.Long})
 CREATE (person)-[:GROUP_BY]->(people)
+WITH update, people, person
+CALL apoc.create.addLabels([person], [update.Case_Type]) YIELD node
 
 WITH update, people, COLLECT(person) AS persons
 SET people.Cases = update.Difference

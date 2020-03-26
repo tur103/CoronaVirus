@@ -66,42 +66,42 @@ YIELD value
 RETURN DISTINCT 1
 """
 
-LOAD_GLOBAL_CASES = """
-MERGE (global_deaths_case_type:GlobalCaseType:Deaths {Case_Type: "Deaths"})
+LOAD_GLOBAL_RECENT_UPDATES = """
+MERGE (global_deaths_recent_update:GlobalRecentUpdate:Deaths {Case_Type: "Deaths"})
 
-WITH global_deaths_case_type
-OPTIONAL MATCH (global_deaths_case_type)<-[rel:IN_GLOBAL_CASE]-(old_deaths_update:Update)
+WITH global_deaths_recent_update
+OPTIONAL MATCH (global_deaths_recent_update)<-[rel:IN_GLOBAL_RECENT_UPDATE]-(old_deaths_update:Update)
 WHERE NOT old_deaths_update:MostRecent
 DELETE rel
 
-WITH global_deaths_case_type, COLLECT(old_deaths_update) AS old_deaths_updates
+WITH global_deaths_recent_update, COLLECT(old_deaths_update) AS old_deaths_updates
 MATCH (new_deaths_update:Update:MostRecent:Deaths)
 
-MERGE (new_deaths_update)-[:IN_GLOBAL_CASE {Date: new_deaths_update.Date,
-                                            Cases: new_deaths_update.Cases}]->(global_deaths_case_type)
+MERGE (new_deaths_update)-[:IN_GLOBAL_RECENT_UPDATE {Date: new_deaths_update.Date,
+                                            Cases: new_deaths_update.Cases}]->(global_deaths_recent_update)
 
-WITH global_deaths_case_type, COLLECT(new_deaths_update) AS new_deaths_updates
-MATCH (global_deaths_case_type)<-[rel:IN_GLOBAL_CASE]-(:Update)
-WITH global_deaths_case_type, SUM(toInteger(rel.Cases)) AS global_cases
-SET global_deaths_case_type.Cases = global_cases
+WITH global_deaths_recent_update, COLLECT(new_deaths_update) AS new_deaths_updates
+MATCH (global_deaths_recent_update)<-[rel:IN_GLOBAL_RECENT_UPDATE]-(:Update)
+WITH global_deaths_recent_update, SUM(toInteger(rel.Cases)) AS global_cases
+SET global_deaths_recent_update.Cases = global_cases
 
-MERGE (global_confirmed_case_type:GlobalCaseType:Confirmed {Case_Type: "Confirmed"})
+MERGE (global_confirmed_recent_update:GlobalRecentUpdate:Confirmed {Case_Type: "Confirmed"})
 
-WITH global_confirmed_case_type
-OPTIONAL MATCH (global_confirmed_case_type)<-[rel:IN_GLOBAL_CASE]-(old_confirmed_update:Update)
+WITH global_confirmed_recent_update
+OPTIONAL MATCH (global_confirmed_recent_update)<-[rel:IN_GLOBAL_RECENT_UPDATE]-(old_confirmed_update:Update)
 WHERE NOT old_confirmed_update:MostRecent
 DELETE rel
 
-WITH global_confirmed_case_type, COLLECT(old_confirmed_update) AS old_confirmed_updates
+WITH global_confirmed_recent_update, COLLECT(old_confirmed_update) AS old_confirmed_updates
 MATCH (new_confirmed_update:Update:MostRecent:Confirmed)
 
-MERGE (new_confirmed_update)-[:IN_GLOBAL_CASE {Date: new_confirmed_update.Date,
-                                               Cases: new_confirmed_update.Cases}]->(global_confirmed_case_type)
+MERGE (new_confirmed_update)-[:IN_GLOBAL_RECENT_UPDATE {Date: new_confirmed_update.Date,
+                                               Cases: new_confirmed_update.Cases}]->(global_confirmed_recent_update)
 
-WITH global_confirmed_case_type, COLLECT(new_confirmed_update) AS new_confirmed_updates
-MATCH (global_confirmed_case_type)<-[rel:IN_GLOBAL_CASE]-(:Update)
-WITH global_confirmed_case_type, SUM(toInteger(rel.Cases)) AS global_cases
-SET global_confirmed_case_type.Cases = global_cases
+WITH global_confirmed_recent_update, COLLECT(new_confirmed_update) AS new_confirmed_updates
+MATCH (global_confirmed_recent_update)<-[rel:IN_GLOBAL_RECENT_UPDATE]-(:Update)
+WITH global_confirmed_recent_update, SUM(toInteger(rel.Cases)) AS global_cases
+SET global_confirmed_recent_update.Cases = global_cases
 """
 
 LOAD_PROGRESSION = """
@@ -117,4 +117,59 @@ WHERE NOT update:MostRecent
 WITH update, updates[apoc.coll.indexOf(updates, update) + 1] AS next_update
 MERGE (update)-[:NEXT_UPDATE {Cases_Difference: next_update.Difference,
                               Days_Difference: duration.inDays(update.Date, next_update.Date).Days}]->(next_update)
+"""
+
+LOAD_GLOBAL_CASE_TYPES = """
+MERGE (global_deaths_case_type:GlobalCaseType:Deaths {Case_Type: "Deaths"})
+
+WITh global_deaths_case_type
+MATCH (update:Update:Deaths)-[:IN_DATE]->(date:Date)
+
+WITH global_deaths_case_type, date, SUM(toInteger(update.Cases)) AS updates_cases
+MERGE (global_update:GlobalUpdate:Deaths {Date: date.Date, Case_Type: "Deaths"})
+SET global_update.Cases = updates_cases
+
+MERGE (global_update)-[:IN_GLOBAL_CASE {Date: date.Date, Cases: updates_cases}]->(global_deaths_case_type)
+MERGE (global_update)-[:IN_DATE {Date: date.Date}]->(date)
+WITH COLLECT(global_update) AS global_updates
+
+MERGE (global_confirmed_case_type:GlobalCaseType:Confirmed {Case_Type: "Confirmed"})
+
+WITh global_confirmed_case_type
+MATCH (update:Update:Confirmed)-[:IN_DATE]->(date:Date)
+
+WITH global_confirmed_case_type, date, SUM(toInteger(update.Cases)) AS updates_cases
+MERGE (global_update:GlobalUpdate:Confirmed {Date: date.Date, Case_Type: "Confirmed"})
+SET global_update.Cases = updates_cases
+
+MERGE (global_update)-[:IN_GLOBAL_CASE {Date: date.Date, Cases: updates_cases}]->(global_confirmed_case_type)
+MERGE (global_update)-[:IN_DATE {Date: date.Date}]->(date)
+"""
+
+LOAD_GLOBAL_PROGRESSION = """
+MATCH (global_case_type:GlobalCaseType)<-[:IN_GLOBAL_CASE]-(global_update:GlobalUpdate)
+
+WITH global_case_type, global_update
+ORDER BY global_update.Date DESC
+WITH global_case_type, COLLECT(global_update) AS global_updates
+WITH global_case_type, global_updates[0] AS most_recent_global_update
+SET most_recent_global_update:MostRecent
+SET global_case_type.Last_Update = most_recent_global_update.Date, global_case_type.Cases = most_recent_global_update.Cases
+
+WITh global_case_type
+MATCH (global_case_type)<-[:IN_GLOBAL_CASE]-(global_update:GlobalUpdate)
+
+WITH global_case_type, global_update
+ORDER BY global_update.Date
+WITH global_case_type, COLLECT(global_update) AS global_updates
+
+UNWIND global_updates AS global_update
+WITH global_updates, global_update
+WHERE NOT global_update:MostRecent
+WITH global_update, global_updates[apoc.coll.indexOf(global_updates, global_update) + 1] AS next_global_update
+WITH global_update, next_global_update, toInteger(next_global_update.Cases) - toInteger(global_update.Cases) AS difference
+SET next_global_update.Difference = difference
+MERGE (global_update)-[:NEXT_UPDATE {Cases_Difference: next_global_update.Difference,
+                                     Days_Difference: duration.inDays(global_update.Date, next_global_update.Date).Days}]
+                     ->(next_global_update)
 """
